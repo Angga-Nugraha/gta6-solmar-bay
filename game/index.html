@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solmar Bay — An Open-World Crime Story</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23ffd24a'/%3E%3Ccircle cx='16' cy='13' r='7' fill='%23ff5a8a'/%3E%3Crect y='22' width='32' height='10' fill='%232e8b9a'/%3E%3C/svg%3E">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1210;
+    font-family: 'Segoe UI', Arial, sans-serif; color: #fff; }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .panel { background: rgba(10, 10, 16, 0.62); border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 8px; padding: 8px 12px; backdrop-filter: blur(2px); }
+  /* Objective — top left */
+  #objective { position: absolute; top: 14px; left: 14px; min-width: 280px; max-width: 360px; }
+  #objective-title { font-size: 13px; letter-spacing: 2px; color: #ffd24a; font-weight: 700; }
+  #objective-text { font-size: 15px; font-weight: 600; margin-top: 2px; }
+  #objective-dist { font-size: 13px; color: #9fe8ff; margin-top: 2px; }
+  /* Wanted + cash — top right */
+  #top-right { position: absolute; top: 14px; right: 14px; text-align: right; }
+  #stars { font-size: 26px; letter-spacing: 4px; color: #ffd24a; text-shadow: 0 0 8px rgba(255,210,74,0.7); }
+  #stars.hot { color: #ff3a3a; animation: blink 0.5s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.45; } }
+  #cash { font-size: 24px; font-weight: 800; color: #7affc9; margin-top: 2px; }
+  #clock, #district { font-size: 13px; color: #ddd; }
+  /* Bottom left — vitals + minimap */
+  #bottom-left { position: absolute; left: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
+  #minimap { width: 180px; height: 180px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5);
+    background: #2e8b9a; box-shadow: 0 0 12px rgba(0,0,0,0.5); }
+  .bar-row { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; width: 180px; }
+  .bar { flex: 1; height: 10px; background: rgba(0,0,0,0.6); border-radius: 5px; overflow: hidden; }
+  .bar > div { height: 100%; transition: width 0.15s; }
+  #health-fill { background: #3ad97a; width: 100%; }
+  #armour-fill { background: #4ad8ff; width: 0%; }
+  #stamina-fill { background: #ffd24a; width: 100%; }
+  /* Bottom right — weapon + speedo */
+  #bottom-right { position: absolute; right: 14px; bottom: 14px; text-align: right; }
+  #weapon-name { font-size: 15px; font-weight: 700; }
+  #weapon-ammo { font-size: 20px; font-weight: 800; color: #ffd24a; }
+  #speedo { margin-top: 8px; }
+  #speed-num { font-size: 44px; font-weight: 900; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
+  #speedo .unit { font-size: 13px; color: #ddd; }
+  /* Centre */
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
+    transform: translate(-50%,-50%); display: none; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff;
+    box-shadow: 0 0 4px #000; }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { left: 0; top: 10px; width: 22px; height: 2px; }
+  #hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    font-size: 26px; font-weight: 900; color: #fff; display: none; text-shadow: 0 0 6px #000; }
+  #prompt { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%);
+    font-size: 16px; font-weight: 700; background: rgba(0,0,0,0.65); padding: 6px 14px;
+    border-radius: 6px; border: 1px solid rgba(255,210,74,0.6); display: none; }
+  #progress { position: absolute; left: 50%; bottom: 28%; transform: translateX(-50%);
+    width: 260px; display: none; text-align: center; }
+  #progress .bar { height: 12px; border: 1px solid #fff; }
+  #progress-fill { background: #ffd24a; width: 0%; }
+  #progress-label { font-size: 13px; font-weight: 700; margin-top: 4px; text-shadow: 0 1px 4px #000; }
+  /* Toasts — bottom centre */
+  #toasts { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 6px; width: 520px; }
+  .toast { background: rgba(10,10,16,0.78); border-left: 4px solid #ffd24a; padding: 7px 14px;
+    border-radius: 6px; font-size: 14px; font-weight: 600; text-align: center;
+    animation: toastin 0.25s ease-out; }
+  @keyframes toastin { from { opacity: 0; transform: translateY(8px); } }
+  /* Intro card */
+  #intro-card { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); width: 560px;
+    display: none; text-align: center; }
+  #intro-title { font-size: 26px; font-weight: 900; letter-spacing: 3px; color: #ffd24a; }
+  #intro-text { font-size: 15px; margin-top: 6px; line-height: 1.5; }
+  #damage-flash { position: fixed; inset: 0; background: radial-gradient(ellipse at center,
+    transparent 55%, rgba(255,0,0,0.55)); opacity: 0; pointer-events: none; z-index: 6;
+    transition: opacity 0.18s; }
+  /* Menus + overlays */
+  #menu, #overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center;
+    justify-content: center; background: linear-gradient(180deg, rgba(10,8,20,0.55), rgba(10,8,20,0.82));
+    pointer-events: auto; }
+  #overlay { display: none; }
+  .menu-box { text-align: center; max-width: 640px; padding: 30px; }
+  #menu-title { font-size: 64px; font-weight: 900; letter-spacing: 6px; color: #ffd24a;
+    text-shadow: 0 0 24px rgba(255,90,138,0.8), 0 4px 0 #7a1030; }
+  #overlay-title { font-size: 52px; font-weight: 900; letter-spacing: 4px; color: #ffd24a;
+    text-shadow: 0 0 20px rgba(255,90,138,0.7); }
+  #menu-sub, #overlay-text { font-size: 15px; color: #eee; margin: 12px 0 20px; line-height: 1.6; }
+  #menu-buttons, #overlay-buttons { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .btn { pointer-events: auto; cursor: pointer; font-size: 16px; font-weight: 800; letter-spacing: 2px;
+    color: #111; background: #ffd24a; border: none; border-radius: 6px; padding: 12px 34px; min-width: 280px; }
+  .btn:hover { background: #ffe27a; transform: translateY(-1px); }
+  .menu-stats { font-size: 13px; color: #9fe8ff; margin-top: 8px; }
+  .controls { font-size: 12px; color: #bbb; margin-top: 16px; line-height: 1.7; }
+</style>
+<script>window.__errors=[];window.addEventListener('error',e=>window.__errors.push(String(e.message)));window.addEventListener('unhandledrejection',e=>window.__errors.push('rejection:'+String(e.reason)));</script>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+<div id="damage-flash"></div>
+<div id="hud">
+  <div id="objective" class="panel" style="display:none">
+    <div id="objective-title"></div>
+    <div id="objective-text"></div>
+    <div id="objective-dist"></div>
+  </div>
+  <div id="top-right">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="cash">$150</div>
+    <div id="clock">17:40</div>
+    <div id="district">NEON STRIP</div>
+  </div>
+  <div id="bottom-left">
+    <canvas id="minimap" width="180" height="180"></canvas>
+    <div class="bar-row">HP <div class="bar"><div id="health-fill"></div></div></div>
+    <div class="bar-row">AR <div class="bar"><div id="armour-fill"></div></div></div>
+    <div class="bar-row">ST <div class="bar"><div id="stamina-fill"></div></div></div>
+  </div>
+  <div id="bottom-right">
+    <div id="weapon-name">P9 Palm Pistol</div>
+    <div id="weapon-ammo">6 / 48</div>
+    <div id="speedo" style="display:none"><span id="speed-num">0</span> <span class="unit">km/h</span></div>
+  </div>
+  <div id="crosshair"></div>
+  <div id="hitmarker">✕</div>
+  <div id="prompt"></div>
+  <div id="progress"><div class="bar"><div id="progress-fill"></div></div><div id="progress-label"></div></div>
+  <div id="intro-card" class="panel"><div id="intro-title"></div><div id="intro-text"></div></div>
+  <div id="toasts"></div>
+</div>
+<div id="menu">
+  <div class="menu-box">
+    <div id="menu-title">SOLMAR BAY</div>
+    <div id="menu-sub">An open-world crime story — an original game. 100% original: no Rockstar content.</div>
+    <div id="menu-buttons"></div>
+    <div class="controls">WASD move · Shift sprint · Space jump · Mouse look (click to lock) · E enter / steal car ·
+      F punch · Click shoot · R reload · 1/2/3 weapons · Q radio · M phone · Esc pause<br>
+      Drive, steal cars, outrun the SBPD, run 8 story missions. Find 20 golden shells on the beach.</div>
+  </div>
+</div>
+<div id="overlay">
+  <div class="menu-box">
+    <div id="overlay-title"></div>
+    <div id="overlay-text"></div>
+    <div id="overlay-buttons"></div>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
